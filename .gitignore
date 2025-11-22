@@ -1,0 +1,2 @@
+# 屏蔽所有名为 submissions 的文件夹及其内容
+**/submissions/
