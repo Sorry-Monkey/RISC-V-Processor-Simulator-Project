@@ -523,6 +523,7 @@ class FiveStageCore(Core):
                 # if the previous instruction is R-type or I-type (except load) or jump, then we need to stall the pipeline for one cycle if the current instruction is dependent on the previous instruction
                 # elif (self.state.EX["wrt_enable"] == 1 and self.state.EX["rd_mem"] != 1 and self.state.EX["Wrt_reg_addr"] != 0) and (self.state.EX["Wrt_reg_addr"] == int(Instr[-20:-15], 2) or self.state.EX["Wrt_reg_addr"] == int(Instr[-25:-20], 2)):
                 
+                # if you want to cancel EX -> ID forwarding, you need to use the code below
                 # elif (self.state.EX["wrt_enable"] == 1 and self.state.EX["rd_mem"] != 1) and (self.state.EX["Wrt_reg_addr"] == int(Instr[-20:-15], 2) or self.state.EX["Wrt_reg_addr"] == int(Instr[-25:-20], 2)):
                 #     self.nextState.EX["nop"] = True  # stall the pipeline by inserting a nop in EX stage
                 #     self.nextState.IF["PC"] = self.state.IF["PC"]  # keep PC unchanged to fetch the same instruction in the next cycle
@@ -585,6 +586,7 @@ class FiveStageCore(Core):
                         if self.state.MEM["Wrt_reg_addr"] == Rt:
                             Read_data2 = self.state.MEM["ALUresult"]
 
+                    # just to meet professor's requirement, I don't like EX -> ID forwarding
                     # test (EX -> ID forwarding)
                     if self.state.EX["wrt_enable"] == 1 and self.state.EX["rd_mem"] != 1 and self.state.EX["Wrt_reg_addr"] != 0:
                         if self.state.EX["Wrt_reg_addr"] == Rs:
