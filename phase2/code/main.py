@@ -95,11 +95,14 @@ class State(object):
         # PC is the address of the instruction to be fetched
         self.IF = {"nop": False, "PC": 0}
         # Instr is 32-bit instruction coming from previous IF stage
-        self.ID = {"nop": False, "Instr": 0, "PC_Plus_4": 0, "PC": 0, "PC_Src": False}
+        # PC_wrt: whether the PC has been updated in this cycle (for hazard detection unit)
+        # the right way is to recompute PC+4 in EX stage to write back for jal, not propagate PC+4 from IF to WB stage
+        self.ID = {"nop": False, "Instr": 0, "PC_Plus_4": 0, "PC": 0, "PC_wrt": False}
 
         # Read_data1, Read_data2: data from rs1, rs2
-        # alu_op: ALU operation code
-        # is_I_type: the instruction is I-type or not
+        # alu_op: intermediate ALU operation control signal
+        # alu_ctrl: ALU control signal
+        # is_I_type: the instruction has immediate value or not
         # Imm: immediate value after sign-extend
 
         # Rs, Rt: rs1, rs2. Needed to be compared with rd in MEM and WB stage for hazard detection!
@@ -108,16 +111,21 @@ class State(object):
         # rd_mem: whether to read from memory in MEM stage
         # wrt_mem: whether to write to memory in MEM stage
         # wrt_enable: whether to write to register file in WB stage
+
+        # jump: whether the instruction is j-type
+        # branch: whether the instruction is SB-type
+        # branch_type: type of branch instruction (fun3)
+        # PC_target: target address for branch instruction (actually we do not need this signal)
         self.EX = {"nop": False, "Read_data1": 0, "Read_data2": 0, "Imm": 0, "Rs": 0, "Rt": 0, "Wrt_reg_addr": 0, "is_I_type": False, "rd_mem": 0, 
                    "wrt_mem": 0, "alu_op": 0, "wrt_enable": 0, "jump": False, "PC_Plus_4": 0, "branch_type": 0, "PC_target": 0, "alu_ctrl": 0}
         # ALUresult: result from ALU
         # Store_data: data to be stored into data memory
+        # Rs, Rt are useless
         self.MEM = {"nop": False, "ALUresult": 0, "Store_data": 0, "Rs": 0, "Rt": 0, "Wrt_reg_addr": 0, "rd_mem": 0, 
                    "wrt_mem": 0, "wrt_enable": 0}
         # Wrt_data: data to be written back to register file
+        # Rs, Rt are useless
         self.WB = {"nop": False, "Wrt_data": 0, "Rs": 0, "Rt": 0, "Wrt_reg_addr": 0, "wrt_enable": 0}
-
-        # Why do we need Rs, Rt in MEM, WB stage???
 
 
 class Core(object):
@@ -475,13 +483,14 @@ class FiveStageCore(Core):
 
             hazard = False
             # Hazard Detection Unit
+            # can use branch and jump signal (instead of opcode) to combine hazard detection for R, S, I-type instructions (actually this is the right way to do it)
             if opcode == "0110011" or opcode == "0100011":  # for R-type and S-type instruction
                 # if the previous instruction is load, then we need to stall the pipeline for one cycle if the current instruction is dependent on the load instruction
                 # if self.state.EX["rd_mem"] == 1 and self.state.EX["Wrt_reg_addr"] != 0 and (self.state.EX["Wrt_reg_addr"] == int(Instr[-20:-15], 2) or self.state.EX["Wrt_reg_addr"] == int(Instr[-25:-20], 2)):
                 if self.state.EX["rd_mem"] == 1 and (self.state.EX["Wrt_reg_addr"] == int(Instr[-20:-15], 2) or self.state.EX["Wrt_reg_addr"] == int(Instr[-25:-20], 2)):
                     self.nextState.EX["nop"] = True  # stall the pipeline by inserting a nop in EX stage
                     self.nextState.IF["PC"] = self.state.IF["PC"]  # keep PC unchanged to fetch the same instruction in the next cycle
-                    self.state.ID["PC_Src"] = True  # indicate that the PC has been updated in this cycle
+                    self.state.ID["PC_wrt"] = True  # indicate that the PC has been updated in this cycle
                     self.nextState.ID["Instr"] = self.state.ID["Instr"]  # keep the same instruction in ID stage for the next cycle
                     self.nextState.ID["PC"] = self.state.ID["PC"]  # keep the same PC in ID stage for the next cycle
                     self.nextState.ID["PC_Plus_4"] = self.state.ID["PC_Plus_4"]  # keep the same PC_Plus_4 in ID stage for the next cycle
@@ -491,7 +500,7 @@ class FiveStageCore(Core):
                 if self.state.EX["rd_mem"] == 1 and (self.state.EX["Wrt_reg_addr"] == int(Instr[-20:-15], 2)):
                     self.nextState.EX["nop"] = True  # stall the pipeline by inserting a nop in EX stage
                     self.nextState.IF["PC"] = self.state.IF["PC"]  # keep PC unchanged to fetch the same instruction in the next cycle
-                    self.state.ID["PC_Src"] = True  # indicate that the PC has been updated in this cycle
+                    self.state.ID["PC_wrt"] = True  # indicate that the PC has been updated in this cycle
                     self.nextState.ID["Instr"] = self.state.ID["Instr"]  # keep the same instruction in ID stage for the next cycle
                     self.nextState.ID["PC"] = self.state.ID["PC"]  # keep the same PC in ID stage for the next cycle
                     self.nextState.ID["PC_Plus_4"] = self.state.ID["PC_Plus_4"]  # keep the same PC_Plus_4 in ID stage for the next cycle
@@ -504,7 +513,7 @@ class FiveStageCore(Core):
                     # first time stall
                     self.nextState.EX["nop"] = True  # stall the pipeline by inserting a nop in EX stage
                     self.nextState.IF["PC"] = self.state.IF["PC"]  # keep PC unchanged to fetch the same instruction in the next cycle
-                    self.state.ID["PC_Src"] = True  # indicate that the PC has been updated in this cycle
+                    self.state.ID["PC_wrt"] = True  # indicate that the PC has been updated in this cycle
                     self.nextState.ID["Instr"] = self.state.ID["Instr"]  # keep the same instruction in ID stage for the next cycle
                     self.nextState.ID["PC"] = self.state.ID["PC"]  # keep the same PC in ID stage for the next cycle
                     self.nextState.ID["PC_Plus_4"] = self.state.ID["PC_Plus_4"]  # keep the same PC_Plus_4 in ID stage for the next cycle
@@ -514,7 +523,7 @@ class FiveStageCore(Core):
                     # second time stall
                     self.nextState.EX["nop"] = True  # stall the pipeline by inserting a nop in EX stage
                     self.nextState.IF["PC"] = self.state.IF["PC"]  # keep PC unchanged to fetch the same instruction in the next cycle
-                    self.state.ID["PC_Src"] = True  # indicate that the PC has been updated in this cycle
+                    self.state.ID["PC_wrt"] = True  # indicate that the PC has been updated in this cycle
                     self.nextState.ID["Instr"] = self.state.ID["Instr"]  # keep the same instruction in ID stage for the next cycle
                     self.nextState.ID["PC"] = self.state.ID["PC"]  # keep the same PC in ID stage for the next cycle
                     self.nextState.ID["PC_Plus_4"] = self.state.ID["PC_Plus_4"]  # keep the same PC_Plus_4 in ID stage for the next cycle
@@ -527,7 +536,7 @@ class FiveStageCore(Core):
                 # elif (self.state.EX["wrt_enable"] == 1 and self.state.EX["rd_mem"] != 1) and (self.state.EX["Wrt_reg_addr"] == int(Instr[-20:-15], 2) or self.state.EX["Wrt_reg_addr"] == int(Instr[-25:-20], 2)):
                 #     self.nextState.EX["nop"] = True  # stall the pipeline by inserting a nop in EX stage
                 #     self.nextState.IF["PC"] = self.state.IF["PC"]  # keep PC unchanged to fetch the same instruction in the next cycle
-                #     self.state.ID["PC_Src"] = True  # indicate that the PC has been updated in this cycle
+                #     self.state.ID["PC_wrt"] = True  # indicate that the PC has been updated in this cycle
                 #     self.nextState.ID["Instr"] = self.state.ID["Instr"]  # keep the same instruction in ID stage for the next cycle
                 #     self.nextState.ID["PC"] = self.state.ID["PC"]  # keep the same PC in ID stage for the next cycle
                 #     self.nextState.ID["PC_Plus_4"] = self.state.ID["PC_Plus_4"]  # keep the same PC_Plus_4 in ID stage for the next cycle
@@ -566,7 +575,7 @@ class FiveStageCore(Core):
                     self.nextState.EX["jump"] = True
                     # update PC in ID stage for JAL, so that the next instruction can be fetched in the next cycle
                     self.nextState.IF["PC"] = self.state.ID["PC"] + Imm
-                    self.state.ID["PC_Src"] = True  # indicate that the PC has been updated in this cycle
+                    self.state.ID["PC_wrt"] = True  # indicate that the PC has been updated in this cycle
                     self.nextState.ID["nop"] = True  # flush the pipeline after jump
                 elif opcode == '1100011':  # SB-type instruction (branch)
                     Rs = int(Instr[-20:-15], 2)
@@ -606,7 +615,7 @@ class FiveStageCore(Core):
                         if fun3 == '000':  # BEQ
                             if branch_result == 0:
                                 self.nextState.IF["PC"] = self.nextState.EX["PC_target"]  # update PC
-                                self.state.ID["PC_Src"] = True  # indicate that the PC has been updated in this cycle
+                                self.state.ID["PC_wrt"] = True  # indicate that the PC has been updated in this cycle
                                 self.nextState.ID["nop"] = True  # flush the pipeline after branch
                                 self.nextState.EX["nop"] = True  # flush the pipeline after branch
                             else:
@@ -615,7 +624,7 @@ class FiveStageCore(Core):
                         elif fun3 == '001':  # BNE
                             if branch_result != 0:
                                 self.nextState.IF["PC"] = self.nextState.EX["PC_target"]  # update PC
-                                self.state.ID["PC_Src"] = True  # indicate that the PC has been updated in this cycle
+                                self.state.ID["PC_wrt"] = True  # indicate that the PC has been updated in this cycle
                                 self.nextState.ID["nop"] = True  # flush the pipeline after branch
                                 self.nextState.EX["nop"] = True  # flush the pipeline after branch
                                 # print("bne taken at cycle: " + str(self.cycle))
@@ -686,7 +695,7 @@ class FiveStageCore(Core):
             self.nextState.ID["nop"] = True  # if IF stage is nop, then ID stage should also be nop
             self.nextState.IF["nop"] = True  # keep IF stage nop
         else:
-            if self.state.ID["PC_Src"]:
+            if self.state.ID["PC_wrt"]:
                 pass  # if PC has been updated in ID stage, then do not update it in IF stage (also do not fetch new instruction in this cycle)
             else:
                 PC = self.state.IF["PC"]
