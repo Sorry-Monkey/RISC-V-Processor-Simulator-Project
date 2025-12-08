@@ -519,15 +519,15 @@ class FiveStageCore(Core):
                     self.nextState.ID["PC_Plus_4"] = self.state.ID["PC_Plus_4"]  # keep the same PC_Plus_4 in ID stage for the next cycle
                     hazard = True
                 # elif self.state.MEM["rd_mem"] == 1 and self.state.MEM["Wrt_reg_addr"] != 0 and (self.state.MEM["Wrt_reg_addr"] == int(Instr[-20:-15], 2) or self.state.MEM["Wrt_reg_addr"] == int(Instr[-25:-20], 2)):
-                elif self.state.MEM["rd_mem"] == 1 and (self.state.MEM["Wrt_reg_addr"] == int(Instr[-20:-15], 2) or self.state.MEM["Wrt_reg_addr"] == int(Instr[-25:-20], 2)):
-                    # second time stall
-                    self.nextState.EX["nop"] = True  # stall the pipeline by inserting a nop in EX stage
-                    self.nextState.IF["PC"] = self.state.IF["PC"]  # keep PC unchanged to fetch the same instruction in the next cycle
-                    self.state.ID["PC_wrt"] = True  # indicate that the PC has been updated in this cycle
-                    self.nextState.ID["Instr"] = self.state.ID["Instr"]  # keep the same instruction in ID stage for the next cycle
-                    self.nextState.ID["PC"] = self.state.ID["PC"]  # keep the same PC in ID stage for the next cycle
-                    self.nextState.ID["PC_Plus_4"] = self.state.ID["PC_Plus_4"]  # keep the same PC_Plus_4 in ID stage for the next cycle
-                    hazard = True
+                # elif self.state.MEM["rd_mem"] == 1 and (self.state.MEM["Wrt_reg_addr"] == int(Instr[-20:-15], 2) or self.state.MEM["Wrt_reg_addr"] == int(Instr[-25:-20], 2)):
+                #     # second time stall
+                #     self.nextState.EX["nop"] = True  # stall the pipeline by inserting a nop in EX stage
+                #     self.nextState.IF["PC"] = self.state.IF["PC"]  # keep PC unchanged to fetch the same instruction in the next cycle
+                #     self.state.ID["PC_wrt"] = True  # indicate that the PC has been updated in this cycle
+                #     self.nextState.ID["Instr"] = self.state.ID["Instr"]  # keep the same instruction in ID stage for the next cycle
+                #     self.nextState.ID["PC"] = self.state.ID["PC"]  # keep the same PC in ID stage for the next cycle
+                #     self.nextState.ID["PC_Plus_4"] = self.state.ID["PC_Plus_4"]  # keep the same PC_Plus_4 in ID stage for the next cycle
+                #     hazard = True
 
                 # if the previous instruction is R-type or I-type (except load) or jump, then we need to stall the pipeline for one cycle if the current instruction is dependent on the previous instruction
                 # elif (self.state.EX["wrt_enable"] == 1 and self.state.EX["rd_mem"] != 1 and self.state.EX["Wrt_reg_addr"] != 0) and (self.state.EX["Wrt_reg_addr"] == int(Instr[-20:-15], 2) or self.state.EX["Wrt_reg_addr"] == int(Instr[-25:-20], 2)):
@@ -594,6 +594,14 @@ class FiveStageCore(Core):
                             Read_data1 = self.state.MEM["ALUresult"]
                         if self.state.MEM["Wrt_reg_addr"] == Rt:
                             Read_data2 = self.state.MEM["ALUresult"]
+
+                    # just to meet professor's requirement, I don't like it
+                    # (MEM -> ID forwarding, this logic has not been tested yet)
+                    if self.state.MEM["rd_mem"] == 1 and self.state.MEM["Wrt_reg_addr"] != 0:
+                        if self.state.MEM["Wrt_reg_addr"] == Rs:
+                            Read_data1 = self.signExtend(self.nextState.WB["Wrt_data"])
+                        if self.state.MEM["Wrt_reg_addr"] == Rt:
+                            Read_data2 = self.signExtend(self.nextState.WB["Wrt_data"])
 
                     # just to meet professor's requirement, I don't like EX -> ID forwarding
                     # test (EX -> ID forwarding)
